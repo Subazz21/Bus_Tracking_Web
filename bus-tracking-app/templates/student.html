@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>College Bus Tracker - Student View</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 1.8em;
+        }
+
+        .header h1 span {
+            color: #667eea;
+        }
+
+        .status-badge {
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+        }
+
+        .status-online {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .status-offline {
+            background: #f44336;
+            color: white;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 20px;
+        }
+
+        #map {
+            height: 600px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .sidebar {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .sidebar h2 {
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .bus-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border-left: 4px solid #667eea;
+        }
+
+        .bus-card:hover {
+            transform: translateX(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .bus-card.selected {
+            border-left: 4px solid #4CAF50;
+            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+        }
+
+        .bus-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .bus-id {
+            font-weight: bold;
+            color: #333;
+            font-size: 1.1em;
+        }
+
+        .bus-status {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .status-moving {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .status-stopped {
+            background: #ff9800;
+            color: white;
+        }
+
+        .bus-route {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+
+        .bus-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+
+        .detail-item {
+            background: rgba(255, 255, 255, 0.5);
+            padding: 8px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .detail-label {
+            color: #666;
+            font-size: 0.8em;
+        }
+
+        .detail-value {
+            font-weight: bold;
+            color: #333;
+            font-size: 1.1em;
+        }
+
+        .update-time {
+            text-align: center;
+            margin-top: 20px;
+            color: #666;
+            font-size: 0.9em;
+            font-style: italic;
+        }
+
+        .no-buses {
+            text-align: center;
+            color: #666;
+            padding: 40px 20px;
+        }
+
+        .no-buses p {
+            margin-top: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            #map {
+                height: 400px;
+            }
+        }
+
+        .bus-icon {
+            background: #667eea;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            border: 3px solid white;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        }
+
+        .bus-icon.moving {
+            background: #4CAF50;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1> <span>College Bus Tracker</span></h1>
+                <p>Track your college buses in real-time</p>
+            </div>
+            <div id="connectionStatus" class="status-badge status-offline">
+                Connecting...
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div id="map"></div>
+
+            <div class="sidebar">
+                <h2> Active Buses</h2>
+                <div id="busList">
+                    <div class="no-buses">
+                        <h3>No active buses</h3>
+                        <p>Waiting for drivers to come online...</p>
+                    </div>
+                </div>
+                <div class="update-time" id="updateTime">
+                    Last update: Waiting...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let map;
+        const busMarkers = {};
+        let selectedBusId = null;
+        let socket;
+
+        // Initialize map
+        function initMap() {
+            // Default to a central location (will be updated when buses appear)
+            map = L.map('map').setView([40.7128, -74.0060], 12);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        // Connect to server
+        function connectToServer() {
+            socket = io();
+
+            socket.on('connect', function () {
+                console.log('Connected to server');
+                updateConnectionStatus(true);
+
+                // Request list of active buses
+                socket.emit('get_active_buses');
+            });
+
+            socket.on('bus_location_update', function (data) {
+                console.log('Bus update:', data);
+                updateBusOnMap(data);
+                updateBusList();
+                updateConnectionStatus(true);
+
+                // Update last update time
+                document.getElementById('updateTime').textContent =
+                    'Last update: ' + new Date().toLocaleTimeString();
+            });
+
+            socket.on('active_buses_list', function (data) {
+                console.log('Active buses:', data);
+                updateAllBuses(data.buses);
+            });
+
+            socket.on('disconnect', function () {
+                console.log('Disconnected from server');
+                updateConnectionStatus(false);
+            });
+
+            socket.on('connect_error', function (error) {
+                console.error('Connection error:', error);
+                updateConnectionStatus(false);
+            });
+        }
+
+        // Update all buses
+        function updateAllBuses(buses) {
+            buses.forEach(bus => {
+                if (bus.location) {
+                    updateBusOnMap({
+                        bus_id: bus.bus_id,
+                        latitude: bus.location.lat,
+                        longitude: bus.location.lng,
+                        speed: bus.location.speed,
+                        timestamp: bus.location.timestamp,
+                        route: bus.route
+                    });
+                }
+            });
+            updateBusList();
+        }
+
+        // Update single bus on map
+        function updateBusOnMap(busData) {
+            const busId = busData.bus_id;
+            const lat = busData.latitude;
+            const lng = busData.longitude;
+            const speed = parseFloat(busData.speed) || 0;
+            const isMoving = speed > 1;
+
+            if (busMarkers[busId]) {
+                // Update existing marker
+                busMarkers[busId].setLatLng([lat, lng]);
+
+                // Update popup content
+                busMarkers[busId].setPopupContent(`
+                    <b>Bus ${busId}</b><br>
+                    Route: ${busData.route || 'Unknown'}<br>
+                    Speed: ${speed} km/h<br>
+                    Last update: ${busData.timestamp || 'Just now'}<br>
+                    Status: ${isMoving ? '🟢 Moving' : '🟡 Stopped'}
+                `);
+
+                // Update marker icon based on movement
+                const icon = L.divIcon({
+                    className: `bus-icon ${isMoving ? 'moving' : ''}`,
+                    html: '🚌',
+                    iconSize: [40, 40],
+                    popupAnchor: [0, -20]
+                });
+                busMarkers[busId].setIcon(icon);
+            } else {
+                // Create new marker
+                const icon = L.divIcon({
+                    className: `bus-icon ${isMoving ? 'moving' : ''}`,
+                    html: '🚌',
+                    iconSize: [40, 40],
+                    popupAnchor: [0, -20]
+                });
+
+                const marker = L.marker([lat, lng], { icon: icon })
+                    .addTo(map)
+                    .bindPopup(`
+                        <b>Bus ${busId}</b><br>
+                        Route: ${busData.route || 'Unknown'}<br>
+                        Speed: ${speed} km/h<br>
+                        Last update: ${busData.timestamp || 'Just now'}<br>
+                        Status: ${isMoving ? '🟢 Moving' : '🟡 Stopped'}
+                    `);
+
+                marker.on('click', function () {
+                    selectBus(busId);
+                });
+
+                busMarkers[busId] = marker;
+            }
+
+            // If this is the selected bus, center map on it
+            if (selectedBusId === busId) {
+                map.setView([lat, lng], 15);
+            }
+        }
+
+        // Update bus list in sidebar
+        function updateBusList() {
+            const busListElement = document.getElementById('busList');
+            const busIds = Object.keys(busMarkers);
+
+            if (busIds.length === 0) {
+                busListElement.innerHTML = `
+                    <div class="no-buses">
+                        <h3>🚌 No active buses</h3>
+                        <p>Drivers haven't started broadcasting yet</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            busIds.forEach(busId => {
+                const marker = busMarkers[busId];
+                const latLng = marker.getLatLng();
+                const popupContent = marker.getPopup().getContent();
+
+                // Extract speed from popup content (simple parsing)
+                const speedMatch = popupContent.match(/Speed: ([\d.]+) km\/h/);
+                const speed = speedMatch ? speedMatch[1] : '0';
+
+                const isMoving = parseFloat(speed) > 1;
+                const selectedClass = selectedBusId === busId ? 'selected' : '';
+
+                html += `
+                    <div class="bus-card ${selectedClass}" onclick="selectBus('${busId}')">
+                        <div class="bus-header">
+                            <span class="bus-id">🚌 Bus ${busId}</span>
+                            <span class="bus-status ${isMoving ? 'status-moving' : 'status-stopped'}">
+                                ${isMoving ? 'Moving' : 'Stopped'}
+                            </span>
+                        </div>
+                        <div class="bus-route">${popupContent.match(/Route: (.*?)<br>/)?.[1] || 'Unknown Route'}</div>
+                        <div class="bus-details">
+                            <div class="detail-item">
+                                <div class="detail-label">Speed</div>
+                                <div class="detail-value">${speed} km/h</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Location</div>
+                                <div class="detail-value">${latLng.lat.toFixed(4)}°, ${latLng.lng.toFixed(4)}°</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            busListElement.innerHTML = html;
+        }
+
+        // Select a bus to track
+        function selectBus(busId) {
+            selectedBusId = busId;
+
+            if (busMarkers[busId]) {
+                const latLng = busMarkers[busId].getLatLng();
+                map.setView([latLng.lat, latLng.lng], 15);
+                busMarkers[busId].openPopup();
+            }
+
+            updateBusList();
+        }
+
+        // Update connection status
+        function updateConnectionStatus(connected) {
+            const statusElement = document.getElementById('connectionStatus');
+            if (connected) {
+                statusElement.className = 'status-badge status-online';
+                statusElement.innerHTML = '🟢 Connected';
+            } else {
+                statusElement.className = 'status-badge status-offline';
+                statusElement.innerHTML = ' Disconnected';
+            }
+        }
+
+        // Initialize on page load
+        window.onload = function () {
+            initMap();
+            connectToServer();
+        };
+    </script>
+</body>
+
+</html>

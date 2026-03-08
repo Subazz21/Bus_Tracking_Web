@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bus Driver - GPS Transmitter</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            min-height: 100vh;
+            color: white;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .header h1 {
+            font-size: 1.8em;
+            margin-bottom: 10px;
+        }
+
+        .connection-status {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .connected {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .disconnected {
+            background: #f44336;
+            color: white;
+        }
+
+        .login-section {
+            background: #16213e;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .login-section h2 {
+            margin-bottom: 20px;
+            color: #667eea;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #ccc;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #2a3a5e;
+            border-radius: 8px;
+            background: #0f3460;
+            color: white;
+            font-size: 16px;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group select option {
+            background: #0f3460;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+        }
+
+        .btn-success {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #45a049;
+        }
+
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #da190b;
+        }
+
+        .tracking-section {
+            background: #16213e;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            display: none;
+        }
+
+        .tracking-section.active {
+            display: block;
+        }
+
+        #map {
+            height: 300px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 2px solid #2a3a5e;
+        }
+
+        .info-card {
+            background: #0f3460;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 8px;
+            background: #1a1a2e;
+            border-radius: 5px;
+        }
+
+        .info-label {
+            color: #ccc;
+        }
+
+        .info-value {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .status-good {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .status-warning {
+            background: #ff9800;
+            color: white;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat-box {
+            background: #1a1a2e;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #ccc;
+            margin-top: 5px;
+        }
+
+        .footer {
+            text-align: center;
+            color: #666;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1> Bus Driver GPS Transmitter</h1>
+            <p>Share your live location with students</p>
+            <div id="connectionStatus" class="connection-status disconnected">
+                Disconnected
+            </div>
+        </div>
+
+        <!-- Login Section -->
+        <div id="loginSection" class="login-section">
+            <h2>Driver Login</h2>
+            <div class="form-group">
+                <label>Select Bus</label>
+                <select id="busSelect">
+                    <option value="BUS001">BUS001</option>
+                    <option value="BUS002">BUS002</option>
+                    <option value="BUS003">BUS003</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Driver Name (Optional)</label>
+                <input type="text" id="driverName" placeholder="Enter your name">
+            </div>
+            <button class="btn btn-primary" onclick="connectAsDriver()">
+                Start Broadcasting Location
+            </button>
+        </div>
+
+        <!-- Tracking Section -->
+        <div id="trackingSection" class="tracking-section">
+            <div class="info-card">
+                <div class="info-row">
+                    <span class="info-label">Bus ID:</span>
+                    <span class="info-value" id="displayBusId">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Status:</span>
+                    <span id="broadcastStatus" class="status-badge status-good">🟢 Broadcasting</span>
+                </div>
+            </div>
+
+            <!-- Map -->
+            <div id="map"></div>
+
+            <!-- Location Stats -->
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-value" id="gpsAccuracy">-</div>
+                    <div class="stat-label">GPS Accuracy (m)</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="gpsSpeed">-</div>
+                    <div class="stat-label">Speed (km/h)</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="satellites">-</div>
+                    <div class="stat-label">Satellites</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="lastUpdate">-</div>
+                    <div class="stat-label">Last Update</div>
+                </div>
+            </div>
+
+            <!-- Control Buttons -->
+            <button class="btn btn-danger" onclick="disconnectDriver()" style="margin-top: 20px;">
+                Stop Broadcasting
+            </button>
+        </div>
+
+        <div class="footer">
+            <p>Keep this app open to broadcast your location</p>
+        </div>
+    </div>
+
+    <script>
+        let socket;
+        let map;
+        let driverMarker;
+        let watchId;
+        let busId = '';
+        let driverName = '';
+        let updateCount = 0;
+
+        // Initialize map
+        function initMap() {
+            map = L.map('map').setView([0, 0], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        // Connect as driver
+        function connectAsDriver() {
+            busId = document.getElementById('busSelect').value;
+            driverName = document.getElementById('driverName').value || 'Anonymous Driver';
+
+            // Initialize socket connection
+            socket = io();
+
+            socket.on('connect', function () {
+                console.log('Connected to server');
+
+                // Register as driver
+                socket.emit('driver_connect', {
+                    bus_id: busId,
+                    bus_name: driverName
+                });
+
+                updateConnectionStatus(true);
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('trackingSection').classList.add('active');
+                document.getElementById('displayBusId').textContent = busId;
+
+                // Start GPS tracking
+                startGPSTracking();
+            });
+
+            socket.on('driver_connected', function (data) {
+                console.log('Driver registered:', data);
+            });
+
+            socket.on('connect_error', function (error) {
+                console.error('Connection error:', error);
+                alert('Failed to connect to server. Please try again.');
+            });
+        }
+
+        // Start GPS tracking
+        function startGPSTracking() {
+            if (navigator.geolocation) {
+                watchId = navigator.geolocation.watchPosition(
+                    sendLocation,
+                    handleLocationError,
+                    {
+                        enableHighAccuracy: true,
+                        maximumAge: 0,
+                        timeout: 5000
+                    }
+                );
+            } else {
+                alert("Geolocation is not supported by this browser.");
+            }
+        }
+
+        // Send location to server
+        function sendLocation(position) {
+            const latitude = position.coords.latitude;
+            const longitude = position.coords.longitude;
+            const accuracy = position.coords.accuracy;
+            const speed = position.coords.speed ? (position.coords.speed * 3.6).toFixed(1) : 0; // Convert m/s to km/h
+
+            updateCount++;
+            const timestamp = new Date().toLocaleTimeString();
+
+            // Update UI
+            document.getElementById('gpsAccuracy').textContent = accuracy.toFixed(1);
+            document.getElementById('gpsSpeed').textContent = speed;
+            document.getElementById('satellites').textContent = position.coords.satellites || 'N/A';
+            document.getElementById('lastUpdate').textContent = timestamp;
+
+            // Update map
+            if (!driverMarker) {
+                driverMarker = L.marker([latitude, longitude]).addTo(map);
+                driverMarker.bindPopup(`<b>${busId}</b><br>Driver: ${driverName}`).openPopup();
+                map.setView([latitude, longitude], 15);
+            } else {
+                driverMarker.setLatLng([latitude, longitude]);
+                map.panTo([latitude, longitude]);
+            }
+
+            // Send to server
+            if (socket && socket.connected) {
+                socket.emit('driver_location', {
+                    bus_id: busId,
+                    latitude: latitude,
+                    longitude: longitude,
+                    speed: speed,
+                    accuracy: accuracy,
+                    timestamp: timestamp
+                });
+
+                // Add a small pulse effect to show transmission
+                if (updateCount % 3 === 0) {
+                    document.getElementById('broadcastStatus').className = 'status-badge status-good';
+                    document.getElementById('broadcastStatus').innerHTML = '🟢 Broadcasting';
+                }
+            }
+        }
+
+        function handleLocationError(error) {
+            let errorMessage = '';
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMessage = "Please enable location access to broadcast your position.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMessage = "Location information is unavailable.";
+                    break;
+                case error.TIMEOUT:
+                    errorMessage = "Location request timed out.";
+                    break;
+            }
+            alert(errorMessage);
+            document.getElementById('broadcastStatus').className = 'status-badge status-warning';
+            document.getElementById('broadcastStatus').innerHTML = '🟡 GPS Issue';
+        }
+
+        function disconnectDriver() {
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+            }
+
+            if (socket) {
+                socket.disconnect();
+            }
+
+            updateConnectionStatus(false);
+            document.getElementById('loginSection').style.display = 'block';
+            document.getElementById('trackingSection').classList.remove('active');
+
+            if (driverMarker) {
+                map.removeLayer(driverMarker);
+                driverMarker = null;
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusElement = document.getElementById('connectionStatus');
+            if (connected) {
+                statusElement.className = 'connection-status connected';
+                statusElement.innerHTML = '🟢 Connected';
+            } else {
+                statusElement.className = 'connection-status disconnected';
+                statusElement.innerHTML = ' Disconnected';
+            }
+        }
+
+        // Initialize map on page load
+        window.onload = function () {
+            initMap();
+        };
+    </script>
+</body>
+
+</html>
